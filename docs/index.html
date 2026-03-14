@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Three.js Cloud Shader – Dark Glassmorphism Portfolio</title>
+
+    <!-- ES Module Shims for import maps compatibility -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+
+    <!-- Import map for Three.js and addons -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+                "addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <!-- Detect iPad and adjust settings -->
+    <script>
+        // Detect iPad (including iPadOS 13+ which reports as MacIntel)
+        const isiPad = navigator.userAgent.match(/iPad/i) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        
+        // Add class to body for CSS adjustments
+        document.documentElement.classList.add(isiPad ? 'ipad' : 'desktop');
+    </script>
+
+    <style>
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            padding: 0;
+            margin: 0;
+            background-color: #0a0f19; /* Dark fallback */
+            font-family: "mono45-headline", -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            font-size: 13px;
+            text-align: center;
+            font-weight: bold;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        body {
+            margin: 0px;
+            font-family: Monospace;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        .container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            padding: 0;
+            margin: 0;
+            z-index: 1;
+            background-size: 32px 100%;
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+        }
+
+        /* Loading indicator */
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 16px;
+            z-index: 20;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+            background: rgba(20, 30, 45, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 15px 30px;
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: opacity 0.5s ease;
+        }
+
+        .ipad .loading {
+            font-size: 20px;
+        }
+
+        /* ===== DARK GLASSMORPHISM OVERLAY ===== */
+        .glass-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            overflow-y: auto;
+            padding: 40px 20px;
+            box-sizing: border-box;
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+            background: rgba(10, 15, 25, 0.35);
+        }
+
+        /* Make all direct children clickable and centered */
+        .glass-overlay > * {
+            pointer-events: auto;
+            max-width: 1200px;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Dark noise texture */
+        .glass-noise {
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJmIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iLjc0IiBudW1PY3RhdmVzPSIzIiAvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNmKSIgb3BhY2l0eT0iMC4xIiAvPjwvc3ZnPg==');
+            background-repeat: repeat;
+            opacity: 0.08;
+            filter: invert(1) brightness(0.5);
+            pointer-events: none;
+            animation: noiseMove 0.5s infinite steps(1);
+            z-index: 1;
+        }
+
+        @keyframes noiseMove {
+            0% { transform: translate(0, 0); }
+            10% { transform: translate(-5%, -5%); }
+            20% { transform: translate(-10%, 5%); }
+            30% { transform: translate(5%, -10%); }
+            40% { transform: translate(-5%, 15%); }
+            50% { transform: translate(-10%, 5%); }
+            60% { transform: translate(15%, 0); }
+            70% { transform: translate(0, 10%); }
+            80% { transform: translate(-15%, 0); }
+            90% { transform: translate(10%, 5%); }
+            100% { transform: translate(5%, 0); }
+        }
+
+        /* Accent line - brand color */
+        .accent-line {
+            width: 100px;
+            height: 3px;
+            background: linear-gradient(90deg, #4f8cff, #8a6eff);
+            margin: 0 auto 30px;
+            border-radius: 2px;
+            box-shadow: 0 0 15px rgba(79, 140, 255, 0.3);
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Typography */
+        .glass-title {
+            font-size: clamp(3rem, 10vw, 6rem);
+            font-weight: 800;
+            margin: 0 0 10px;
+            letter-spacing: -0.02em;
+            text-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(135deg, #fff 0%, #e0e7ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            position: relative;
+            z-index: 2;
+        }
+
+        .glass-subtitle {
+            font-size: clamp(1.2rem, 4vw, 1.8rem);
+            font-weight: 400;
+            margin: 0 0 40px;
+            color: #e2e8f0;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+            letter-spacing: 0.5px;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Glass cards container */
+        .glass-card-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin: 30px 0;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Individual glass card - dark theme */
+        .glass-card {
+            background: rgba(20, 30, 45, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 24px;
+            padding: 30px 25px;
+            width: 220px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease, background 0.3s ease;
+            cursor: default;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-10px);
+            background: rgba(30, 40, 60, 0.8);
+            border-color: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2));
+        }
+
+        .glass-card h3 {
+            font-size: 1.4rem;
+            margin: 0 0 10px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .glass-card p {
+            font-size: 0.95rem;
+            margin: 0;
+            color: #cbd5e0;
+            line-height: 1.5;
+        }
+
+        /* CTA Buttons - dark theme */
+        .glass-cta {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 30px 0;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 2;
+        }
+
+        .glass-button {
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(25, 35, 50, 0.7);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            color: white;
+            letter-spacing: 0.5px;
+        }
+
+        .glass-button.primary {
+            background: rgba(45, 60, 85, 0.8);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .glass-button.secondary {
+            background: rgba(25, 35, 50, 0.6);
+        }
+
+        .glass-button:hover {
+            transform: scale(1.05);
+            background: rgba(55, 75, 105, 0.9);
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Stats section - dark theme */
+        .glass-stats {
+            display: flex;
+            gap: 40px;
+            justify-content: center;
+            margin: 30px 0;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 2;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(20, 30, 45, 0.6);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            padding: 20px 30px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 100px;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 800;
+            line-height: 1;
+            background: linear-gradient(135deg, #fff 0%, #cbd5e0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 1rem;
+            color: #a0b3d9;
+            margin-top: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Social links - dark theme */
+        .glass-social {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 2;
+        }
+
+        .social-link {
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            background: rgba(25, 35, 50, 0.6);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
+        }
+
+        .social-link:hover {
+            background: rgba(45, 60, 85, 0.8);
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* iPad specific adjustments */
+        .ipad .glass-card {
+            padding: 25px 20px;
+        }
+
+        .ipad .glass-title {
+            font-size: 5rem;
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+            .glass-overlay {
+                padding: 20px 15px;
+                justify-content: flex-start;
+            }
+            
+            .glass-card {
+                width: 100%;
+                max-width: 280px;
+            }
+            
+            .glass-stats {
+                gap: 15px;
+            }
+            
+            .stat-item {
+                padding: 15px 20px;
+                min-width: 80px;
+            }
+            
+            .stat-number {
+                font-size: 2rem;
+            }
+            
+            .glass-button {
+                padding: 12px 30px;
+                width: 100%;
+                max-width: 280px;
+            }
+            
+            .glass-cta {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .glass-social {
+                gap: 10px;
+            }
+            
+            .social-link {
+                padding: 8px 16px;
+                font-size: 0.9rem;
+            }
+        }
+
+        /* Animations */
+        @keyframes floatIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .glass-card, .glass-button, .stat-item, .social-link {
+            animation: floatIn 0.8s ease-out forwards;
+            opacity: 0;
+        }
+
+        .glass-card:nth-child(2) { animation-delay: 0.2s; }
+        .glass-card:nth-child(3) { animation-delay: 0.4s; }
+        .glass-button.secondary { animation-delay: 0.3s; }
+        .stat-item:nth-child(2) { animation-delay: 0.15s; }
+        .stat-item:nth-child(3) { animation-delay: 0.3s; }
+        .social-link:nth-child(2) { animation-delay: 0.1s; }
+        .social-link:nth-child(3) { animation-delay: 0.2s; }
+        .social-link:nth-child(4) { animation-delay: 0.3s; }
+    </style>
+</head>
+<body>
+    <!-- Three.js Canvas Container -->
+    <div class="container" id="container"></div>
+    
+    <!-- Dark Glassmorphism Overlay - NO BIG CARD -->
+    <div class="glass-overlay">
+        <div class="glass-noise"></div>
+        
+        <!-- Elements now float directly on the blurred background -->
+        <div class="accent-line"></div>
+        
+        <h1 class="glass-title">Alex Morgan</h1>
+        <h2 class="glass-subtitle">Creative Developer & 3D Artist</h2>
+        
+        <div class="glass-card-container">
+            <div class="glass-card">
+                <span class="card-icon">⚡</span>
+                <h3>Interactive 3D</h3>
+                <p>Three.js, WebGL, Shaders, Real-time effects, WebXR</p>
+            </div>
+            <div class="glass-card">
+                <span class="card-icon">🎨</span>
+                <h3>Creative Design</h3>
+                <p>UI/UX, Glassmorphism, Responsive, Motion design</p>
+            </div>
+            <div class="glass-card">
+                <span class="card-icon">📱</span>
+                <h3>Mobile Optimized</h3>
+                <p>iPad, iOS, Android, Touch interfaces, PWA</p>
+            </div>
+        </div>
+        
+        <div class="glass-cta">
+            <a href="#work" class="glass-button primary">View Portfolio</a>
+            <a href="#contact" class="glass-button secondary">Contact Me</a>
+        </div>
+        
+        <div class="glass-stats">
+            <div class="stat-item">
+                <span class="stat-number">5+</span>
+                <span class="stat-label">Years</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">50+</span>
+                <span class="stat-label">Projects</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">30+</span>
+                <span class="stat-label">Clients</span>
+            </div>
+        </div>
+        
+        <div class="glass-social">
+            <a href="#" class="social-link">GitHub</a>
+            <a href="#" class="social-link">LinkedIn</a>
+            <a href="#" class="social-link">Dribbble</a>
+            <a href="#" class="social-link">Twitter</a>
+        </div>
+    </div>
+    
+    <!-- Loading Indicator -->
+    <div class="loading" id="loading">Loading clouds...</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import * as BufferGeometryUtils from 'addons/utils/BufferGeometryUtils.js';
+
+        // iPad detection
+        const isiPad = /iPad/i.test(navigator.userAgent) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        
+        // Performance settings based on device
+        const settings = {
+            cloudCount: isiPad ? 4000 : 8000,
+            planeSize: isiPad ? 48 : 64,
+            particleSize: isiPad ? 1.2 : 1.5,
+            farPlane: isiPad ? 2500 : 3000,
+            textureQuality: isiPad ? THREE.LinearFilter : THREE.LinearMipMapLinearFilter,
+            antialias: !isiPad,
+            pixelRatio: Math.min(window.devicePixelRatio, isiPad ? 2 : 3)
+        };
+
+        // Cloud shader
+        const cloudShader = {
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D map;
+                uniform vec3 fogColor;
+                uniform float fogNear;
+                uniform float fogFar;
+                varying vec2 vUv;
+
+                void main() {
+                    float depth = gl_FragCoord.z / gl_FragCoord.w;
+                    float fogFactor = smoothstep( fogNear, fogFar, depth );
+                    gl_FragColor = texture2D( map, vUv );
+                    
+                    // Optimized cloud transparency
+                    gl_FragColor.w *= pow( gl_FragCoord.z, 15.0 );
+                    
+                    // Brighten clouds
+                    gl_FragColor.rgb = mix( gl_FragColor.rgb, vec3(1.0, 1.0, 1.0), 0.3 );
+                    
+                    gl_FragColor = mix( gl_FragColor, vec4( fogColor, gl_FragColor.w ), fogFactor * 0.7 );
+                }
+            `
+        };
+
+        const container = document.querySelector(".container");
+        const loadingEl = document.getElementById("loading");
+
+        // Hide loading when ready
+        function hideLoading() {
+            if (loadingEl) {
+                loadingEl.style.opacity = '0';
+                setTimeout(() => {
+                    loadingEl.style.display = 'none';
+                }, 500);
+            }
+        }
+
+        // Handle orientation change on iPad
+        function handleOrientationChange() {
+            setTimeout(() => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, isiPad ? 2 : 3));
+            }, 100);
+        }
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(
+            30,
+            window.innerWidth / window.innerHeight,
+            1,
+            settings.farPlane
+        );
+        
+        const renderer = new THREE.WebGLRenderer({
+            antialias: settings.antialias,
+            gammaOutput: true,
+            alpha: true,
+            powerPreference: "high-performance",
+            failIfMajorPerformanceCaveat: false
+        });
+
+        renderer.setPixelRatio(settings.pixelRatio);
+        
+        const mouse = new THREE.Vector2();
+
+        let mesh, geometry, material;
+        let position;
+
+        var mouseX = 0,
+            mouseY = 0;
+        var start_time = Date.now();
+
+        var windowHalfX = window.innerWidth / 2;
+        var windowHalfY = window.innerHeight / 2;
+
+        var tLoader = new THREE.TextureLoader();
+
+        // Create a simple procedural cloud texture as fallback
+        function createFallbackTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            
+            // Draw a soft circle
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(32, 32, 25, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add some noise
+            ctx.globalCompositeOperation = 'overlay';
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            for (let i = 0; i < 50; i++) {
+                ctx.beginPath();
+                ctx.arc(15 + Math.random() * 40, 15 + Math.random() * 40, 5 + Math.random() * 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            return texture;
+        }
+
+        // Show loading state
+        loadingEl.style.display = 'block';
+
+        // Try to load cloud.png, use fallback if it fails
+        tLoader.load(
+            "cloud.png",
+            (t) => {
+                t.colorSpace = THREE.SRGBColorSpace;
+                t.magFilter = settings.textureQuality;
+                t.minFilter = settings.textureQuality;
+                init(t);
+                hideLoading();
+            },
+            undefined,
+            (error) => {
+                console.warn('Cloud texture not found, using generated texture');
+                // Use fallback texture
+                const fallbackTexture = createFallbackTexture();
+                fallbackTexture.magFilter = settings.textureQuality;
+                fallbackTexture.minFilter = settings.textureQuality;
+                init(fallbackTexture);
+                hideLoading();
+            }
+        );
+
+        function init(t) {
+            // Create gradient background
+            var canvas = document.createElement("canvas");
+            canvas.width = 32;
+            canvas.height = window.innerHeight;
+
+            var context = canvas.getContext("2d");
+
+            // Bright day sky gradient
+            var gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, "#4aa3ff");
+            gradient.addColorStop(0.3, "#7fc7ff");
+            gradient.addColorStop(0.6, "#b0d9ff");
+            gradient.addColorStop(0.8, "#d9ecff");
+            gradient.addColorStop(1, "#ffffff");
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, canvas.width, canvas.height);
+
+            container.style.background = "url(" + canvas.toDataURL("image/png") + ")";
+            container.style.backgroundSize = "32px 100%";
+
+            camera.position.z = 6000;
+
+            geometry = new THREE.BufferGeometry();
+
+            var texture = t;
+
+            // Brighter fog color
+            var fog = new THREE.Fog(0xb0d9ff, -100, settings.farPlane + 1000);
+            scene.fog = fog;
+
+            material = new THREE.ShaderMaterial({
+                uniforms: {
+                    map: { value: texture },
+                    fogColor: { value: fog.color },
+                    fogNear: { value: fog.near },
+                    fogFar: { value: fog.far }
+                },
+                vertexShader: cloudShader.vertexShader,
+                fragmentShader: cloudShader.fragmentShader,
+                depthWrite: false,
+                depthTest: false,
+                transparent: true
+            });
+
+            const planeGeo = new THREE.PlaneGeometry(settings.planeSize, settings.planeSize);
+            var planeObj = new THREE.Object3D();
+            const geometries = [];
+
+            // Batch geometry creation to prevent UI freeze
+            let i = 0;
+            const totalClouds = settings.cloudCount;
+            const batchSize = 500;
+            
+            function createCloudBatch() {
+                const end = Math.min(i + batchSize, totalClouds);
+                
+                for (; i < end; i++) {
+                    planeObj.position.x = Math.random() * 1000 - 500;
+                    planeObj.position.y = -Math.random() * Math.random() * 100 - 28;
+                    planeObj.position.z = i * (settings.farPlane / totalClouds) * 2;
+                    planeObj.rotation.z = Math.random() * Math.PI;
+                    planeObj.scale.x = planeObj.scale.y =
+                        Math.random() * Math.random() * (isiPad ? 1.3 : 1.5) + 0.5;
+                    planeObj.updateMatrix();
+
+                    const clonedPlaneGeo = planeGeo.clone();
+                    clonedPlaneGeo.applyMatrix4(planeObj.matrix);
+
+                    geometries.push(clonedPlaneGeo);
+                }
+                
+                if (i < totalClouds) {
+                    requestAnimationFrame(createCloudBatch);
+                } else {
+                    finalizeScene();
+                }
+            }
+            
+            function finalizeScene() {
+                const planeGeos = BufferGeometryUtils.mergeGeometries(geometries);
+                const planesMesh = new THREE.Mesh(planeGeos, material);
+                planesMesh.renderOrder = 2;
+
+                const planesMeshA = planesMesh.clone();
+                planesMeshA.position.z = -settings.farPlane * 2;
+                planesMeshA.renderOrder = 1;
+
+                scene.add(planesMesh);
+                scene.add(planesMeshA);
+
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                container.appendChild(renderer.domElement);
+
+                // Event listeners
+                document.addEventListener("mousemove", onDocumentMouseMove, false);
+                document.addEventListener("touchmove", onDocumentTouchMove, { passive: false });
+                document.addEventListener("touchstart", onDocumentTouchStart, { passive: false });
+                
+                window.addEventListener("resize", onWindowResize, false);
+                window.addEventListener("orientationchange", handleOrientationChange, false);
+
+                animate();
+            }
+            
+            createCloudBatch();
+        }
+
+        // Touch event handlers
+        function onDocumentTouchStart(event) {
+            event.preventDefault();
+            if (event.touches.length === 1) {
+                const touch = event.touches[0];
+                mouseX = (touch.clientX - windowHalfX) * 0.04;
+                mouseY = (touch.clientY - windowHalfY) * 0.04;
+            }
+        }
+
+        function onDocumentTouchMove(event) {
+            event.preventDefault();
+            if (event.touches.length === 1) {
+                const touch = event.touches[0];
+                mouseX = (touch.clientX - windowHalfX) * 0.04;
+                mouseY = (touch.clientY - windowHalfY) * 0.04;
+            }
+        }
+
+        function onDocumentMouseMove(event) {
+            mouseX = (event.clientX - windowHalfX) * 0.08;
+            mouseY = (event.clientY - windowHalfY) * 0.08;
+        }
+
+        function onWindowResize(event) {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, isiPad ? 2 : 3));
+            
+            windowHalfX = window.innerWidth / 2;
+            windowHalfY = window.innerHeight / 2;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            position = ((Date.now() - start_time) * 0.015) % (settings.farPlane * 2);
+
+            camera.position.x += (mouseX - camera.position.x) * (isiPad ? 0.002 : 0.002);
+            camera.position.y += (-mouseY - camera.position.y) * (isiPad ? 0.002 : 0.002);
+            camera.position.z = -position + settings.farPlane * 2;
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
